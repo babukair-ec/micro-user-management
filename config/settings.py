@@ -87,6 +87,8 @@ else:
         }
     }
 
+AUTH_USER_MODEL = 'users.User'
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
@@ -125,7 +127,7 @@ REST_FRAMEWORK = {
 
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'microservices-shared-task-management-jwt-secret-key-2026')
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv('ACCESS_TOKEN_LIFETIME_MINUTES', 1440))),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv('ACCESS_TOKEN_LIFETIME_MINUTES', 480))),  # 8 hours
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,

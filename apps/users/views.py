@@ -9,7 +9,7 @@ class UserTokenObtainPairView(TokenObtainPairView):
     serializer_class = UserTokenObtainPairSerializer
 
 class UserRegistrationView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = []
 
     def post(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
@@ -19,9 +19,11 @@ class UserRegistrationView(APIView):
             return Response({
                 'message': str(_('User registered successfully')),
                 'user': {
-                    'id': user.id,
+                    'outer_id': str(getattr(user, 'outer_id', user.id)),
                     'username': user.username,
                     'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
                     'full_name': full_name,
                 }
             }, status=status.HTTP_201_CREATED)
@@ -35,7 +37,7 @@ class CurrentUserView(APIView):
         full_name = f"{user.first_name} {user.last_name}".strip() or user.username
         return Response({
             'user': {
-                'id': user.id,
+                'outer_id': str(getattr(user, 'outer_id', user.id)),
                 'username': user.username,
                 'email': user.email,
                 'first_name': user.first_name,
