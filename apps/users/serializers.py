@@ -1,3 +1,6 @@
+import os
+import logging
+import requests
 from django.db.transaction import set_rollback
 from django.db import transaction
 from rest_framework import serializers
@@ -7,6 +10,7 @@ from django.contrib.auth import get_user_model
 from apps.messaging.rabbitmq import publish_event
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 class UserTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -18,9 +22,22 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['email'] = user.email
         token['full_name'] = full_name
         token['user_id'] = outer_id_str
-        # token['employee_id'] = outer_id_str
         token['user_num_id'] = user.id
-        # token['outer_id'] = outer_id_str
+
+        # Attempt to resolve Employee outer_id from Employee Service
+        try:
+            emp_service_url = os.getenv('EMPLOYEE_SERVICE_URL', 'http://localhost:8002')
+            resp = requests.get(f"{emp_service_url}/api/employees/?search={user.username}", timeout=2)
+            if resp.ok:
+                emp_list = resp.json()
+                results = emp_list if isinstance(emp_list, list) else emp_list.get('results', [])
+                for emp in results:
+                    if emp.get('username') == user.username and emp.get('outer_id'):
+                        token['employee_id'] = str(emp.get('outer_id'))
+                        break
+        except Exception:
+            pass
+
         return token
 
     def validate(self, attrs):
@@ -38,12 +55,6 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer):
             'full_name': full_name,
         }
         return data
-
-import os
-import logging
-import requests
-
-logger = logging.getLogger(__name__)
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     username = serializers.CharField(required=True)
