@@ -24,20 +24,6 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['user_id'] = outer_id_str
         token['user_num_id'] = user.id
 
-        # Attempt to resolve Employee outer_id from Employee Service
-        try:
-            emp_service_url = os.getenv('EMPLOYEE_SERVICE_URL', 'http://localhost:8002')
-            resp = requests.get(f"{emp_service_url}/api/employees/?search={user.username}", timeout=2)
-            if resp.ok:
-                emp_list = resp.json()
-                results = emp_list if isinstance(emp_list, list) else emp_list.get('results', [])
-                for emp in results:
-                    if emp.get('username') == user.username and emp.get('outer_id'):
-                        token['employee_id'] = str(emp.get('outer_id'))
-                        break
-        except Exception:
-            pass
-
         return token
 
     def validate(self, attrs):
@@ -84,29 +70,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         outer_id_str = str(getattr(user, 'outer_id', user.id))
         full_name = f"{user.first_name} {user.last_name}".strip() or user.username
 
-        # Automatically create Employee record in Employee Service synchronously
-        try:
-            emp_service_url = os.getenv('EMPLOYEE_SERVICE_URL', 'http://localhost:8002')
-            requests.post(
-                f"{emp_service_url}/api/employees/",
-                json={
-                    'user_id': outer_id_str,
-                    'username': user.username,
-                    'first_name': user.first_name,
-                    'last_name': user.last_name,
-                    'email': user.email,
-                    'job_title': job_title,
-                    'phone': phone,
-                },
-                timeout=100,
-            )
-        except Exception as exc:
-            set_rollback(True)
-            raise Exception(str(exc))
-            logger.warning(f"Failed to auto-sync employee record to employee-service: {exc}")
-
-        # Publish user.created event for RabbitMQ consumers
-        publish_event('user.created', {
+        payload = {
             'id': user.id,
             'outer_id': outer_id_str,
             'user_id': outer_id_str,
@@ -118,5 +82,20 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             'department': department,
             'job_title': job_title,
             'phone': phone,
-        })
+        }
+
+        # Dispatch Celery task to employee-service to create the employee profile
+        from config.celery import celery_app
+        try:
+            celery_app.send_task(
+                'apps.employees.tasks.create_employee_profile',
+                args=[payload],
+                queue='celery'
+            )
+            logger.info(f"[Celery] Dispatched create_employee_profile task for '{user.username}'")
+        except Exception as exc:
+            logger.warning(f"[Celery] Failed to dispatch create_employee_profile task: {exc}")
+
+        # Also publish user.created event via Celery/Kombu for topic subscribers
+        publish_event('user.created', payload)
         return user
