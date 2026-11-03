@@ -103,7 +103,7 @@ def seed_users():
         outer_id_str = str(getattr(user, 'outer_id', uid))
         if publish_event:
             try:
-                publish_event('user.created', {
+                publish_event('aboody.user.created', {
                     'id': user.id,
                     'outer_id': outer_id_str,
                     'user_id': outer_id_str,

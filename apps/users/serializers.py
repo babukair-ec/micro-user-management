@@ -51,16 +51,18 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     job_title = serializers.CharField(write_only=True, required=True)
     department = serializers.CharField(write_only=True, required=False, default='General')
     phone = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True, default=None)
+    supervisor_outer_id = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True, default=None)
 
     class Meta:
         model = User
-        fields = ['username', 'password', 'first_name', 'last_name', 'email', 'department', 'job_title', 'phone']
+        fields = ['username', 'password', 'first_name', 'last_name', 'email', 'department', 'job_title', 'phone', 'supervisor_outer_id']
 
     @transaction.atomic()
     def create(self, validated_data):
         department = validated_data.pop('department', 'General')
         job_title = validated_data.pop('job_title', 'Team Member')
         phone = validated_data.pop('phone', None) or None
+        supervisor_outer_id = validated_data.pop('supervisor_outer_id', None) or None
         email = validated_data.get('email')
         validated_data['email'] = email.strip() if email else None
         password = validated_data.pop('password')
@@ -84,18 +86,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             'phone': phone,
         }
 
-        # Dispatch Celery task to employee-service to create the employee profile
-        from config.celery import celery_app
-        try:
-            celery_app.send_task(
-                'apps.employees.tasks.create_employee_profile',
-                args=[payload],
-                queue='celery'
-            )
-            logger.info(f"[Celery] Dispatched create_employee_profile task for '{user.username}'")
-        except Exception as exc:
-            logger.warning(f"[Celery] Failed to dispatch create_employee_profile task: {exc}")
+        if supervisor_outer_id:
+            payload['supervisor_outer_id'] = supervisor_outer_id
 
-        # Also publish user.created event via Celery/Kombu for topic subscribers
-        publish_event('user.created', payload)
+        # Publish aboody.user.created domain event to RabbitMQ
+        publish_event('aboody.user.created', payload)
         return user
