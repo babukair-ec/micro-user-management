@@ -9,6 +9,7 @@ class UserTokenObtainPairView(TokenObtainPairView):
     serializer_class = UserTokenObtainPairSerializer
 
 class UserRegistrationView(APIView):
+    authentication_classes = []
     permission_classes = []
 
     def post(self, request):
